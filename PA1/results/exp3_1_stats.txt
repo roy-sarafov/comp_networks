@@ -1,9 +1,0 @@
---- Statistics for results/exp3_1_server.tsv ---
-Total Jobs Expected: 2000
-Total Jobs Processed: 1984
-Total Jobs Dropped: 16
-Percentage Dropped: 0.80%
-Average Job Time: 84264.62 ns
-Median Job Time: 57000.00 ns
-Average Queue Occupancy: 2.32
-Median Queue Occupancy: 1.00
