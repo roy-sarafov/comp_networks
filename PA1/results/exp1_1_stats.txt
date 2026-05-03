@@ -1,0 +1,7 @@
+--- Statistics for results/exp1_1_server.tsv ---
+Total Jobs Expected: 1000
+Total Jobs Processed: 1000
+Average Job Time: 501280.00 ns
+Median Job Time: 349000.00 ns
+Average Queue Occupancy: 1.51
+Median Queue Occupancy: 1.00
