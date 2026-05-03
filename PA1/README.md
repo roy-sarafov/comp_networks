@@ -16,44 +16,44 @@
 *(Queue size set to >4000 to guarantee unbounded behavior)*
 
 **Parameters: (μ=5, λ=3)**
-*   **Average Job Time:** 1512357.18 ns
-*   **Median Job Time:** 1125332.00 ns
-*   **Average Queue Occupancy:** 1.49
+*   **Average Job Time:** 1923047.09 ns
+*   **Median Job Time:** 1124405.50 ns
+*   **Average Queue Occupancy:** 1.43
 *   **Median Queue Occupancy:** 1.00
 
 **Parameters: (μ=3, λ=5)**
-*   **Average Job Time:** 40882358.41 ns
-*   **Median Job Time:** 40798901.00 ns
-*   **Average Queue Occupancy:** 39.99
+*   **Average Job Time:** 61624987.49 ns
+*   **Median Job Time:** 42834634.50 ns
+*   **Average Queue Occupancy:** 40.15
 *   **Median Queue Occupancy:** 32.00
 
 *(Additional results for 2000 and 4000 jobs)*
 
 **Parameters: (μ=50, λ=30, Jobs=2000)**
-*   **Average Job Time:** 509057.29 ns
-*   **Median Job Time:** 298221.50 ns
-*   **Average Queue Occupancy:** 1.60
-*   **Median Queue Occupancy:** 1.00
+*   **Average Job Time:** 2688973.20 ns
+*   **Median Job Time:** 802747.50 ns
+*   **Average Queue Occupancy:** 5.26
+*   **Median Queue Occupancy:** 2.00
 
 **Parameters: (μ=50, λ=35, Jobs=2000)**
-*   **Average Job Time:** 939607.13 ns
-*   **Median Job Time:** 408977.50 ns
-*   **Average Queue Occupancy:** 3.47
+*   **Average Job Time:** 752885.05 ns
+*   **Median Job Time:** 309838.50 ns
+*   **Average Queue Occupancy:** 1.41
 *   **Median Queue Occupancy:** 1.00
 
 **Parameters: (μ=50, λ=30, Jobs=4000)**
-*   **Average Job Time:** 2030482.60 ns
-*   **Median Job Time:** 379830.50 ns
-*   **Average Queue Occupancy:** 5.52
-*   **Median Queue Occupancy:** 1.00
+*   **Average Job Time:** 32309352.70 ns
+*   **Median Job Time:** 32592739.00 ns
+*   **Average Queue Occupancy:** 122.94
+*   **Median Queue Occupancy:** 124.00
 
 ### 2. Two Clients, Unbounded Queue
 *(2000 jobs each, μ=50, λ=20)*
 
-*   **Average Job Time:** 314285700.69 ns
-*   **Median Job Time:** 115984159.00 ns
-*   **Average Queue Occupancy:** 578.21
-*   **Median Queue Occupancy:** 565.00
+*   **Average Job Time:** 433698650.26 ns
+*   **Median Job Time:** 240514250.50 ns
+*   **Average Queue Occupancy:** 851.20
+*   **Median Queue Occupancy:** 871.00
 
 ### 3. Single Client, Bounded Queue (Size = 10)
 *(2000 jobs, checking dropping behavior)*
@@ -61,12 +61,12 @@
 **Parameters: (μ=50, λ=45)**
 *   **Total Jobs Dropped:** 0
 *   **Percentage Dropped:** 0.00%
-*   **Average Job Time:** 668620.05 ns
+*   **Average Job Time:** 309397.63 ns
 
 **Parameters: (μ=50, λ=48)**
-*   **Total Jobs Dropped:** 0
-*   **Percentage Dropped:** 0.00%
-*   **Average Job Time:** 370441.27 ns
+*   **Total Jobs Dropped:** 7
+*   **Percentage Dropped:** 0.35%
+*   **Average Job Time:** 502740.97 ns
 
 ---
 
