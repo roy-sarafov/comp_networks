@@ -61,11 +61,15 @@ echo "=== 1. Single Client, Unbounded Queue ==="
 # >4000 q_size guarantees unbounded for these tests
 run_exp "exp1_1" 1000 5000 42 3.0 5.0
 run_exp "exp1_2" 1000 5000 42 5.0 3.0
+run_exp "exp1_3" 1000 5000 42 30.0 50.0
 
-run_exp "exp1_3" 2000 5000 42 30.0 50.0
-run_exp "exp1_4" 2000 5000 42 35.0 50.0
+run_exp "exp1_4" 4000 5000 42 3.0 5.0
+run_exp "exp1_5" 4000 5000 42 5.0 3.0
+run_exp "exp1_6" 4000 5000 42 30.0 50.0
 
-run_exp "exp1_5" 4000 5000 42 30.0 50.0
+run_exp "exp1_7" 2000 5000 42 35.0 50.0
+run_exp "exp1_8" 2000 5000 42 40.0 50.0
+run_exp "exp1_9" 2000 5000 42 45.0 50.0
 
 echo "=== 2. Two Clients, Unbounded Queue ==="
 # 2000 jobs each, total 4000.

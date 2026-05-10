@@ -18,51 +18,77 @@
 
 (Queue size set to >4000 to guarantee unbounded behavior)
 
-#### Parameters: (μ=5, λ=3)
+#### Parameters: (μ=5, λ=3, Jobs=1000)
 
-* **Average Job Time:** 1992736.09 ns
-* **Median Job Time:** 1176258.00 ns
-* **Average Queue Occupancy:** 1.48
+* **Average Job Time:** 505902.00 ns
+* **Median Job Time:** 352000.00 ns
+* **Average Queue Occupancy:** 1.53
 * **Median Queue Occupancy:** 1.00
 
-#### Parameters: (μ=3, λ=5)
+#### Parameters: (μ=3, λ=5, Jobs=1000)
 
-* **Average Job Time:** 52694451.03 ns
-* **Median Job Time:** 39860606.50 ns
-* **Average Queue Occupancy:** 50.49
-* **Median Queue Occupancy:** 46.00
+* **Average Job Time:** 63550044.00 ns
+* **Median Job Time:** 68117500.00 ns
+* **Average Queue Occupancy:** 157.56
+* **Median Queue Occupancy:** 176.00
 
-(Additional results for 2000 and 4000 jobs)
+#### Parameters: (μ=50, λ=30, Jobs=1000)
 
-#### Parameters: (μ=50, λ=30, Jobs=2000)
+* **Average Job Time:** 49264.00 ns
+* **Median Job Time:** 36000.00 ns
+* **Average Queue Occupancy:** 1.40
+* **Median Queue Occupancy:** 1.00
 
-* **Average Job Time:** 537437.44 ns
-* **Median Job Time:** 317950.50 ns
+#### Parameters: (μ=5, λ=3, Jobs=4000)
+
+* **Average Job Time:** 544094.75 ns
+* **Median Job Time:** 384000.00 ns
+* **Average Queue Occupancy:** 1.67
+* **Median Queue Occupancy:** 1.00
+
+#### Parameters: (μ=3, λ=5, Jobs=4000)
+
+* **Average Job Time:** 266744677.25 ns
+* **Median Job Time:** 255642000.00 ns
+* **Average Queue Occupancy:** 651.09
+* **Median Queue Occupancy:** 637.00
+
+#### Parameters: (μ=50, λ=30, Jobs=4000)
+
+* **Average Job Time:** 52041.50 ns
+* **Median Job Time:** 38000.00 ns
 * **Average Queue Occupancy:** 1.46
 * **Median Queue Occupancy:** 1.00
 
 #### Parameters: (μ=50, λ=35, Jobs=2000)
 
-* **Average Job Time:** 1243732.54 ns
-* **Median Job Time:** 580215.50 ns
-* **Average Queue Occupancy:** 2.54
-* **Median Queue Occupancy:** 2.00
+* **Average Job Time:** 57291.00 ns
+* **Median Job Time:** 41000.00 ns
+* **Average Queue Occupancy:** 1.63
+* **Median Queue Occupancy:** 1.00
 
-#### Parameters: (μ=50, λ=30, Jobs=4000)
+#### Parameters: (μ=50, λ=40, Jobs=2000)
 
-* **Average Job Time:** 360597.11 ns
-* **Median Job Time:** 211846.00 ns
-* **Average Queue Occupancy:** 1.26
+* **Average Job Time:** 65153.00 ns
+* **Median Job Time:** 47000.00 ns
+* **Average Queue Occupancy:** 1.81
+* **Median Queue Occupancy:** 1.00
+
+#### Parameters: (μ=50, λ=45, Jobs=2000)
+
+* **Average Job Time:** 83275.50 ns
+* **Median Job Time:** 55000.00 ns
+* **Average Queue Occupancy:** 2.45
 * **Median Queue Occupancy:** 1.00
 
 ### 2. Two Clients, Unbounded Queue
 
 (2000 jobs each, μ=50, λ=20)
 
-* **Average Job Time:** 614140718.85 ns
-* **Median Job Time:** 222743150.00 ns
-* **Average Queue Occupancy:** 838.72
-* **Median Queue Occupancy:** 840.50
+* **Average Job Time:** 84508.75 ns
+* **Median Job Time:** 62000.00 ns
+* **Average Queue Occupancy:** 2.57
+* **Median Queue Occupancy:** 2.00
 
 ### 3. Single Client, Bounded Queue (Size = 10)
 
@@ -70,15 +96,15 @@
 
 #### Parameters: (μ=50, λ=45)
 
-* **Total Jobs Dropped:** 7
-* **Percentage Dropped:** 0.35%
-* **Average Job Time:** 554251.03 ns
+* **Total Jobs Dropped:** 15
+* **Percentage Dropped:** 0.75%
+* **Average Job Time:** 80804.53 ns
 
 #### Parameters: (μ=50, λ=48)
 
-* **Total Jobs Dropped:** 0
-* **Percentage Dropped:** 0.00%
-* **Average Job Time:** 287908.24 ns
+* **Total Jobs Dropped:** 28
+* **Percentage Dropped:** 1.40%
+* **Average Job Time:** 88773.83 ns
 
 ---
 
@@ -104,7 +130,7 @@
 
 ![System Times](results/exp1_2_histogram.png)
 
-### 3. Single Client, Unbounded Queue (μ=50, λ=30, Jobs=2000)
+### 3. Single Client, Unbounded Queue (μ=50, λ=30, Jobs=1000)
 
 #### 3. Queue Size Over Time
 
@@ -114,7 +140,7 @@
 
 ![System Times](results/exp1_3_histogram.png)
 
-### 4. Single Client, Unbounded Queue (μ=50, λ=35, Jobs=2000)
+### 4. Single Client, Unbounded Queue (μ=5, λ=3, Jobs=4000)
 
 #### 4. Queue Size Over Time
 
@@ -124,7 +150,7 @@
 
 ![System Times](results/exp1_4_histogram.png)
 
-### 5. Single Client, Unbounded Queue (μ=50, λ=30, Jobs=4000)
+### 5. Single Client, Unstable Unbounded Queue (μ=3, λ=5, Jobs=4000)
 
 #### 5. Queue Size Over Time
 
@@ -134,32 +160,72 @@
 
 ![System Times](results/exp1_5_histogram.png)
 
-### 6. Two Clients, Unbounded Queue (μ=50, λ=20, Jobs=4000 total)
+### 6. Single Client, Unbounded Queue (μ=50, λ=30, Jobs=4000)
 
 #### 6. Queue Size Over Time
 
-![Queue Size](results/exp2_queue_depth.png)
+![Queue Size](results/exp1_6_queue_depth.png)
 
 #### 6. Job System Times Histogram
 
-![System Times](results/exp2_histogram.png)
+![System Times](results/exp1_6_histogram.png)
 
-### 7. Single Client, Bounded Queue (Size=10, μ=50, λ=45, Jobs=2000)
+### 7. Single Client, Unbounded Queue (μ=50, λ=35, Jobs=2000)
 
 #### 7. Queue Size Over Time
 
-![Queue Size](results/exp3_1_queue_depth.png)
+![Queue Size](results/exp1_7_queue_depth.png)
 
 #### 7. Job System Times Histogram
 
-![System Times](results/exp3_1_histogram.png)
+![System Times](results/exp1_7_histogram.png)
 
-### 8. Single Client, Bounded Queue (Size=10, μ=50, λ=48, Jobs=2000)
+### 8. Single Client, Unbounded Queue (μ=50, λ=40, Jobs=2000)
 
 #### 8. Queue Size Over Time
 
-![Queue Size](results/exp3_2_queue_depth.png)
+![Queue Size](results/exp1_8_queue_depth.png)
 
 #### 8. Job System Times Histogram
+
+![System Times](results/exp1_8_histogram.png)
+
+### 9. Single Client, Unbounded Queue (μ=50, λ=45, Jobs=2000)
+
+#### 9. Queue Size Over Time
+
+![Queue Size](results/exp1_9_queue_depth.png)
+
+#### 9. Job System Times Histogram
+
+![System Times](results/exp1_9_histogram.png)
+
+### 10. Two Clients, Unbounded Queue (μ=50, λ=20, Jobs=4000 total)
+
+#### 10. Queue Size Over Time
+
+![Queue Size](results/exp2_queue_depth.png)
+
+#### 10. Job System Times Histogram
+
+![System Times](results/exp2_histogram.png)
+
+### 11. Single Client, Bounded Queue (Size=10, μ=50, λ=45, Jobs=2000)
+
+#### 11. Queue Size Over Time
+
+![Queue Size](results/exp3_1_queue_depth.png)
+
+#### 11. Job System Times Histogram
+
+![System Times](results/exp3_1_histogram.png)
+
+### 12. Single Client, Bounded Queue (Size=10, μ=50, λ=48, Jobs=2000)
+
+#### 12. Queue Size Over Time
+
+![Queue Size](results/exp3_2_queue_depth.png)
+
+#### 12. Job System Times Histogram
 
 ![System Times](results/exp3_2_histogram.png)

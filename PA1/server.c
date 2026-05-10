@@ -16,7 +16,7 @@ struct __attribute__((__packed__)) job_msg {
     uint32_t job_length;
 };
 
-// Queue node using sys/queue.h macros[cite: 1, 2]
+// Queue node using sys/queue.h macros
 struct job_node {
     uint32_t client_ip;
     uint16_t client_port;
@@ -47,7 +47,11 @@ struct {
     int server_socket;
 } server_state;
 
-// Helper to calculate nanoseconds elapsed since server start[cite: 1, 2]
+/*
+ * get_elapsed_ns - Returns nanoseconds elapsed since server start.
+ * Input:  none (reads server_state.start_time global)
+ * Output: signed 64-bit elapsed time in nanoseconds
+ */
 int64_t get_elapsed_ns(void) {
     struct timespec now;
     clock_gettime(CLOCK_MONOTONIC, &now);
@@ -56,7 +60,16 @@ int64_t get_elapsed_ns(void) {
     return elapsed;
 }
 
-// Thread 1: Acceptor
+/*
+ * acceptor_thread_func - Acceptor thread: receives UDP datagrams and enqueues jobs.
+ * Input:  arg - unused
+ * Output: returns NULL on exit
+ * Action: Loops until server_state.target_jobs datagrams are received. For each
+ *         datagram, records arrival time, converts fields from network byte order,
+ *         and inserts a new job_node at the tail of the queue (drop-tail if full).
+ *         Dropped jobs still count toward jobs_received. Signals the worker thread
+ *         via condition variable when a job is enqueued.
+ */
 void *acceptor_thread_func(void *arg) {
     (void)arg; // Unused
     struct job_msg buffer;
@@ -68,12 +81,13 @@ void *acceptor_thread_func(void *arg) {
                              0, (struct sockaddr *)&cliaddr, &len);
         if (n < 0) {
             perror("recvfrom failed");
-            continue;
+            close(server_state.server_socket);
+            exit(EXIT_FAILURE);
         }
 
         int64_t arrival = get_elapsed_ns();
         
-        // Convert to host byte order[cite: 1, 2]
+        // Convert to host byte order
         uint32_t c_ip = ntohl(cliaddr.sin_addr.s_addr);
         uint16_t c_port = ntohs(cliaddr.sin_port);
         uint32_t c_id = ntohl(buffer.client_id);
@@ -82,13 +96,15 @@ void *acceptor_thread_func(void *arg) {
 
         pthread_mutex_lock(&server_state.lock);
         
-        server_state.jobs_received++; // Even dropped jobs count towards total[cite: 1, 2]
+        server_state.jobs_received++; // Even dropped jobs count towards total
 
         if (server_state.current_q_size < server_state.max_q_size) {
             // Queue has room, accept job
             struct job_node *new_job = malloc(sizeof(struct job_node));
             if (!new_job) {
                 perror("malloc failed");
+                pthread_mutex_unlock(&server_state.lock);
+                close(server_state.server_socket);
                 exit(EXIT_FAILURE);
             }
             new_job->client_ip = c_ip;
@@ -104,14 +120,23 @@ void *acceptor_thread_func(void *arg) {
             
             pthread_cond_signal(&server_state.cond);
         }
-        // Else: drop tail policy (job discarded)[cite: 1, 2]
+        // Else: drop tail policy (job discarded)
 
         pthread_mutex_unlock(&server_state.lock);
     }
     return NULL;
 }
 
-// Thread 2: Worker
+/*
+ * worker_thread_func - Worker thread: dequeues and executes jobs.
+ * Input:  arg - unused
+ * Output: returns NULL on exit
+ * Action: Waits on condition variable while queue is empty. Dequeues the head job,
+ *         snapshots queue size and total demand (including the executing job), then
+ *         releases the lock and sleeps for job_length_ns to simulate execution.
+ *         Prints one TSV log line per job with timing and queue statistics.
+ *         Exits when the queue is empty and the acceptor is done.
+ */
 void *worker_thread_func(void *arg) {
     (void)arg; // Unused
 
@@ -139,7 +164,7 @@ void *worker_thread_func(void *arg) {
         
         pthread_mutex_unlock(&server_state.lock);
 
-        // Execute job (simulate by sleeping)[cite: 1, 2]
+        // Execute job (simulate by sleeping)
         struct timespec req;
         req.tv_sec = job->job_length_ns / 1000000000L;
         req.tv_nsec = job->job_length_ns % 1000000000L;
@@ -147,7 +172,7 @@ void *worker_thread_func(void *arg) {
 
         int64_t departure = get_elapsed_ns();
 
-        // Print exact formatting required[cite: 1, 2]
+        // Print exact formatting required
         printf("%08x:%04x\t%d:%d\t%ld\t%ld\t%d\t%ld\n",
                job->client_ip, job->client_port, job->client_id, job->job_index, 
                (long)job->arrival_time_ns, (long)departure, current_q_size_snap, (long)current_demand_snap);
@@ -157,6 +182,14 @@ void *worker_thread_func(void *arg) {
     return NULL;
 }
 
+/*
+ * main - Entry point. Parses arguments, sets up UDP socket, starts threads.
+ * Input:  argc/argv: port num_jobs q_size
+ * Output: EXIT_SUCCESS on clean shutdown, EXIT_FAILURE on error
+ * Action: Binds a UDP socket to the given port, initializes shared state,
+ *         spawns acceptor and worker threads, waits for acceptor to finish,
+ *         signals worker, joins both threads, then cleans up.
+ */
 int main(int argc, char *argv[]) {
     if (argc != 4) {
         fprintf(stderr, "Usage: %s port num_jobs q_size\n", argv[0]);
@@ -172,10 +205,8 @@ int main(int argc, char *argv[]) {
     server_state.acceptor_done = 0;
 
     STAILQ_INIT(&server_state.queue);
-    pthread_mutex_init(&server_state.lock, NULL);
-    pthread_cond_init(&server_state.cond, NULL);
 
-    // Setup Socket[cite: 1, 2]
+    // Setup Socket
     if ((server_state.server_socket = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
         perror("Socket creation failed");
         exit(EXIT_FAILURE);
@@ -193,14 +224,38 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    // Start clock[cite: 1, 2]
+    if (pthread_mutex_init(&server_state.lock, NULL) != 0) {
+        perror("pthread_mutex_init failed");
+        close(server_state.server_socket);
+        exit(EXIT_FAILURE);
+    }
+    if (pthread_cond_init(&server_state.cond, NULL) != 0) {
+        perror("pthread_cond_init failed");
+        close(server_state.server_socket);
+        pthread_mutex_destroy(&server_state.lock);
+        exit(EXIT_FAILURE);
+    }
+
+    // Start clock
     clock_gettime(CLOCK_MONOTONIC, &server_state.start_time);
 
     pthread_t acceptor, worker;
-    pthread_create(&acceptor, NULL, acceptor_thread_func, NULL);
-    pthread_create(&worker, NULL, worker_thread_func, NULL);
+    if (pthread_create(&acceptor, NULL, acceptor_thread_func, NULL) != 0) {
+        perror("pthread_create acceptor failed");
+        close(server_state.server_socket);
+        pthread_mutex_destroy(&server_state.lock);
+        pthread_cond_destroy(&server_state.cond);
+        exit(EXIT_FAILURE);
+    }
+    if (pthread_create(&worker, NULL, worker_thread_func, NULL) != 0) {
+        perror("pthread_create worker failed");
+        close(server_state.server_socket);
+        pthread_mutex_destroy(&server_state.lock);
+        pthread_cond_destroy(&server_state.cond);
+        exit(EXIT_FAILURE);
+    }
 
-    // Main thread waits for acceptor to finish receiving `num_jobs`[cite: 1, 2]
+    // Main thread waits for acceptor to finish receiving `num_jobs`
     pthread_join(acceptor, NULL);
 
     // Signal worker that acceptor is done

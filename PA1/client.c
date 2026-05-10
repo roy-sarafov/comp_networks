@@ -15,12 +15,25 @@ struct __attribute__((__packed__)) job_msg {
     uint32_t job_length;
 };
 
-// Function to sample an exponential random variable
+/*
+ * randexp - Samples an exponential random variable.
+ * Input:  lambda - rate parameter (must be > 0)
+ * Output: a non-negative double drawn from Exp(lambda)
+ */
 double randexp(double lambda) {
     double u = rand() / ((double) RAND_MAX + 1.0);
     return -log(1.0 - u) / lambda;
 }
 
+/*
+ * main - Entry point. Parses arguments and generates/sends num_jobs UDP job datagrams.
+ * Input:  argc/argv: ip port num_jobs seed lambda mu
+ * Output: EXIT_SUCCESS on completion, EXIT_FAILURE on error
+ * Action: Seeds the RNG, creates a UDP socket, then for each job: samples inter-arrival
+ *         time x ~ Exp(lambda) and job length y ~ Exp(mu), sleeps floor(x*1e6) ns,
+ *         sends a packed datagram (client_id, job_index, job_length) to the server,
+ *         and logs one TSV line to stdout.
+ */
 int main(int argc, char *argv[]) {
     // The instructions specified: "client ip port num_jobs seed lambda mu"
     // which makes 1 command + 6 args = 7 arguments
@@ -87,7 +100,7 @@ int main(int argc, char *argv[]) {
         }
 
         // Write log to stdout
-        printf("%08x:%04x\t%d:%d\t%d\t%d\n", ip_hex, port, client_id, i, floor_x, floor_y);
+        printf("%08x:%04x\t%d:%d\t%d\t%d\n", ip_hex, (unsigned int)port, client_id, i, floor_x, floor_y);
     }
 
     close(sockfd);
