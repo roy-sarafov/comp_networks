@@ -5,6 +5,10 @@
 * Roy Sarafov, 209619477, <roysarafov@mail.tau.ac.il>
 * Yoav Dychtwald, 209518299, <yoavhaid@mail.tau.ac.il>
 
+## LLM Attribution
+
+Parts of this code were developed with the assistance of an LLM (Kiro/Claude). All generated code was reviewed, tested, and understood by the authors.
+
 ## Submission Contents
 
 * `server.c`: Implementation of the dual-thread UDP server using POSIX threads and `sys/queue.h` for dropping-tail queue management.
