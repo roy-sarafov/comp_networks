@@ -7,7 +7,7 @@ bfproc: nodeproc.c bf.h
 	$(CC) $(CFLAGS) -o $@ nodeproc.c
 
 netproc: netproc.c bf.h
-	$(CC) $(CFLAGS) -o $@ netproc.c -lpthread
+	$(CC) -Wall -O2 -std=c11 -D_GNU_SOURCE -o $@ netproc.c -lpthread
 
 clean:
 	rm -f netproc bfproc
