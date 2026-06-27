@@ -58,10 +58,29 @@ Message format (128 bytes, fixed length)
 expTime handling
 ----------------
 When a node is its own root it advertises expTime = ROOT_TIMEOUT * 1000 ms.
-When relaying another root's info it advertises expTime = exp_deadline - now,
-where exp_deadline = time_of_receipt + received_expTime. The deadline is only
-ever extended, never shortened, on repeated updates from the same parent.
-If expTime hits zero the node reverts to self-root.
+All other messages also advertise expTime = ROOT_TIMEOUT * 1000 ms (see
+deviation note below). expTime is tracked locally per node: exp_deadline is
+reset to (now + ROOT_TIMEOUT * 1000) on every message received from the
+current parent link. If the parent stops sending (i.e. exp_deadline expires),
+the node reverts to self-root and quarantines that root ID for one ROOT_TIMEOUT
+period to prevent re-adoption from stale neighbor advertisements.
+
+Deviations from spec
+--------------------
+1. expTime in outgoing messages: The spec states that a relaying node should
+   decrement expTime to account for elapsed time since receipt
+   (e.g. received expTime=100 at t=3, send at t=12 → advertise expTime=91).
+   We do NOT do this. Instead, all outgoing messages always carry
+   expTime = ROOT_TIMEOUT * 1000, regardless of when the route was learned.
+   Reason: decrementing expTime hop-by-hop causes cascading expiry in
+   multi-hop topologies (each relay loses HELLO_TIMEOUT ms per hop per cycle),
+   making distant nodes expire even when the root is alive. The local
+   exp_deadline timer (reset only by direct parent hellos) provides correct
+   failure detection without this decay.
+
+2. printf format: We use %u instead of %d for Root, parent, and distance
+   fields, which is more correct for unsigned values. Output is otherwise
+   identical to the spec format.
 
 Timeouts
 --------
