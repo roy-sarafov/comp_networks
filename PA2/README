@@ -3,33 +3,28 @@ README – PA2: Distributed Bellman-Ford
 
 Authors
 -------
-Roy Sarafov  209619477
-Yoav Dychtwald 209518299
+<Your Name>  <ID>
 
 Overview
 --------
 nodeproc.c implements a single network node that participates in the distributed
-Blator, which forellman-Ford shortest-path algorithm.  Multiple instances run concurrently; they
-communicate exclusively through the netproc simuwards 128-byte
-TCP messages between connected nodes according to a topology file.
+Bellman-Ford shortest-path algorithm. Multiple instances run concurrently and
+communicate through the netproc simulator, which forwards 128-byte TCP messages
+between connected nodes according to a topology file.
 
 Building
 --------
-    make          # builds bfproc (the node process)
-    make netproc  # builds the network simulator (Linux only – requires threads.h)
-    make clean
+    make          # builds both bfproc and netproc
+    make clean    # removes binaries
 
-Running
--------
-Start the network simulator first:
-
-    ./netproc topology.csv
-
-Then start one node process per node in the topology, e.g. for node 7416:
-
-    ./bfproc 127.0.0.1 7416 60 $(./PA2_resource_beta/costs.sh topology.csv 7416)
-
-The lifetime argument (60 above) sets how many seconds the process runs.
+Files
+-----
+    nodeproc.c    – node process source (compiled as bfproc)
+    netproc.c     – network simulator source (provided)
+    bf.h          – shared constants: PORT, HELLO_TIMEOUT, ROOT_TIMEOUT
+    costs.sh      – helper script to extract link costs from topology file
+    Makefile
+    README
 
 Algorithm
 ---------
@@ -41,13 +36,13 @@ State per node: (myRoot, myCost, parent, expTime)
   expTime – remaining validity of myRoot info (milliseconds)
 
 Bellman-Ford relaxation on each received message (root r, cost c, link l):
-  • r < myRoot                      → adopt new root, update cost/parent
-  • r == myRoot, l == parent        → refresh expTime; update cost if changed
-  • r == myRoot, c+cost[l] < myCost → shorter path via different neighbor
+  • r < myRoot                       → adopt new root, update cost/parent
+  • r == myRoot, l == parent         → refresh expTime; update cost if changed
+  • r == myRoot, c+cost[l] < myCost  → shorter path via different neighbor
 
 A message is sent when:
   1. State (myRoot or myCost) changes.
-  2. HELLO_TIMEOUT seconds have elapsed since the last transmission.
+  2. HELLO_TIMEOUT seconds have elapsed since the last send (keep-alive).
   3. expTime expires → revert to self as root, then broadcast.
 
 Message format (128 bytes, fixed length)
@@ -62,16 +57,17 @@ Message format (128 bytes, fixed length)
 expTime handling
 ----------------
 When a node is its own root it advertises expTime = ROOT_TIMEOUT * 1000 ms.
-When forwarding someone else's root info it advertises
-    expTime = (received_expTime) − (time since reception)
-capped at zero.  If expTime hits zero the node reverts to self-root.
+When relaying another root's info it advertises expTime = exp_deadline - now,
+where exp_deadline = time_of_receipt + received_expTime. The deadline is only
+ever extended, never shortened, on repeated updates from the same parent.
+If expTime hits zero the node reverts to self-root.
 
 Timeouts
 --------
 A single select() call with a dynamically computed timeout implements all timers.
 Before each select the code computes:
     next_event = min(hello_due, root_expiry_due, lifetime_end)
-and passes (next_event − now) as the select timeout.  After select returns,
+and passes (next_event − now) as the select timeout. After select returns,
 all three events are checked in order.
 
 Socket options
@@ -79,3 +75,51 @@ Socket options
   TCP_NODELAY   – set on the socket to netproc (avoids Nagle buffering)
   MSG_WAITALL   – used in recv() to guarantee full 128-byte reads
   MSG_NOSIGNAL  – used in send() to avoid SIGPIPE on connection loss
+
+Running
+-------
+Usage:
+    bfproc <netproc_addr> <node_id> <lifetime> <cost1> [cost2 ...]
+
+Start netproc first, then one bfproc per node. The costs for each node can be
+extracted from the topology file using costs.sh.
+
+Example run with topology.csv (5 nodes, lifetime 30 seconds):
+
+    # Terminal 1
+    ./netproc topology.csv
+
+    # Terminal 2
+    ./bfproc 127.0.0.1 7416  30 $(./costs.sh topology.csv 7416)
+
+    # Terminal 3
+    ./bfproc 127.0.0.1 25824 30 $(./costs.sh topology.csv 25824)
+
+    # Terminal 4
+    ./bfproc 127.0.0.1 53021 30 $(./costs.sh topology.csv 53021)
+
+    # Terminal 5
+    ./bfproc 127.0.0.1 15762 30 $(./costs.sh topology.csv 15762)
+
+    # Terminal 6
+    ./bfproc 127.0.0.1 56908 30 $(./costs.sh topology.csv 56908)
+
+Expected output (example from node 25824):
+
+    time=0.0   Root=25824  parent=NULL  distance=0
+    time=0.0   Message sent to all neighbors
+    time=0.0   Root=7416   parent=1     distance=62
+    time=0.0   Message sent to all neighbors
+    time=2.0   Message sent to all neighbors
+    time=4.0   Message sent to all neighbors
+    ...
+    time=30.0  Lifetime expired. Shutting down.
+
+Expected converged state (root = 7416, smallest ID in topology):
+
+    Node   Root  Parent  Distance  Path
+    7416   7416  NULL    0         self
+    25824  7416  1       62        direct to 7416
+    53021  7416  0       155       direct to 7416
+    15762  7416  1       136       direct to 7416
+    56908  7416  0       85        via 25824 (23+62)
