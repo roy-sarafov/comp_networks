@@ -1,0 +1,81 @@
+README – PA2: Distributed Bellman-Ford
+======================================
+
+Authors
+-------
+Roy Sarafov  209619477
+Yoav Dychtwald 209518299
+
+Overview
+--------
+nodeproc.c implements a single network node that participates in the distributed
+Blator, which forellman-Ford shortest-path algorithm.  Multiple instances run concurrently; they
+communicate exclusively through the netproc simuwards 128-byte
+TCP messages between connected nodes according to a topology file.
+
+Building
+--------
+    make          # builds bfproc (the node process)
+    make netproc  # builds the network simulator (Linux only – requires threads.h)
+    make clean
+
+Running
+-------
+Start the network simulator first:
+
+    ./netproc topology.csv
+
+Then start one node process per node in the topology, e.g. for node 7416:
+
+    ./bfproc 127.0.0.1 7416 60 $(./PA2_resource_beta/costs.sh topology.csv 7416)
+
+The lifetime argument (60 above) sets how many seconds the process runs.
+
+Algorithm
+---------
+State per node: (myRoot, myCost, parent, expTime)
+
+  myRoot  – smallest node ID known to be reachable
+  myCost  – cost of the best-known path to myRoot
+  parent  – incoming link index of the best path (−1 when self is root)
+  expTime – remaining validity of myRoot info (milliseconds)
+
+Bellman-Ford relaxation on each received message (root r, cost c, link l):
+  • r < myRoot                      → adopt new root, update cost/parent
+  • r == myRoot, l == parent        → refresh expTime; update cost if changed
+  • r == myRoot, c+cost[l] < myCost → shorter path via different neighbor
+
+A message is sent when:
+  1. State (myRoot or myCost) changes.
+  2. HELLO_TIMEOUT seconds have elapsed since the last transmission.
+  3. expTime expires → revert to self as root, then broadcast.
+
+Message format (128 bytes, fixed length)
+-----------------------------------------
+  Byte 0     : link index (0xFF = broadcast to all neighbors)
+  Bytes 1–4  : myRoot   (uint32_t, network byte order)
+  Bytes 5–8  : myCost   (uint32_t, network byte order)
+  Bytes 9–12 : myID     (uint32_t, network byte order)
+  Bytes 13–16: expTime  (uint32_t, milliseconds, network byte order)
+  Bytes 17–127: zero-padded
+
+expTime handling
+----------------
+When a node is its own root it advertises expTime = ROOT_TIMEOUT * 1000 ms.
+When forwarding someone else's root info it advertises
+    expTime = (received_expTime) − (time since reception)
+capped at zero.  If expTime hits zero the node reverts to self-root.
+
+Timeouts
+--------
+A single select() call with a dynamically computed timeout implements all timers.
+Before each select the code computes:
+    next_event = min(hello_due, root_expiry_due, lifetime_end)
+and passes (next_event − now) as the select timeout.  After select returns,
+all three events are checked in order.
+
+Socket options
+--------------
+  TCP_NODELAY   – set on the socket to netproc (avoids Nagle buffering)
+  MSG_WAITALL   – used in recv() to guarantee full 128-byte reads
+  MSG_NOSIGNAL  – used in send() to avoid SIGPIPE on connection loss
