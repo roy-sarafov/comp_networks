@@ -1,14 +1,13 @@
-CC      = gcc
-CFLAGS  = -Wall -Wextra -O2 -std=c11 -I$(RESDIR)
-RESDIR  = PA2_resource_beta
+CC     = gcc
+CFLAGS = -Wall -Wextra -O2 -std=c11
 
 all: bfproc netproc
 
-bfproc: nodeproc.c $(RESDIR)/bf.h
-	$(CC) $(CFLAGS) -o $@ $<
+bfproc: nodeproc.c bf.h
+	$(CC) $(CFLAGS) -o $@ nodeproc.c
 
-netproc: $(RESDIR)/netproc.c $(RESDIR)/bf.h
-	$(CC) $(CFLAGS) -o $@ $< -lpthread
+netproc: netproc.c bf.h
+	$(CC) $(CFLAGS) -o $@ netproc.c -lpthread
 
 clean:
 	rm -f netproc bfproc

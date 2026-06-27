@@ -27,7 +27,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "bf.h"
+#include "bf.h"  /* PORT, HELLO_TIMEOUT, ROOT_TIMEOUT */
 
 /* Milliseconds since CLOCK_REALTIME epoch */
 static long long now_ms(void) {
