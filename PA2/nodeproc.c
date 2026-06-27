@@ -109,13 +109,18 @@ int main(int argc, char *argv[]) {
         perror("send id"); close(s); free(costs); return 1;
     }
 
-    long long start_ms   = now_ms();
-    uint32_t  my_root    = my_id;
-    uint32_t  my_cost    = 0;
-    int32_t   parent     = -1;
+    long long start_ms     = now_ms();
+    uint32_t  my_root      = my_id;
+    uint32_t  my_cost      = 0;
+    int32_t   parent       = -1;
     long long exp_deadline = start_ms + (long long)ROOT_TIMEOUT * 1000;
     long long last_send    = start_ms;
     long long life_end     = start_ms + (long long)lifetime * 1000;
+
+    /* When we revert due to expiry, quarantine that root ID until this time.
+     * This prevents immediately re-adopting a dead root from stale neighbors. */
+    uint32_t  quarantine_root    = my_id; /* no quarantine initially */
+    long long quarantine_until   = start_ms;
 
     print_state(now_ms() - start_ms, my_root, parent, my_cost);
     send_update(s, my_root, my_cost, my_id);
@@ -173,7 +178,9 @@ int main(int argc, char *argv[]) {
             int changed = 0;
 
             if (r_root < my_root) {
-                /* Better root */
+                /* Better root — but not if it's quarantined (recently expired) */
+                if (r_root == quarantine_root && now < quarantine_until)
+                    goto next_check;
                 my_root      = r_root;
                 my_cost      = via_cost;
                 parent       = (int32_t)link;
@@ -219,6 +226,10 @@ int main(int argc, char *argv[]) {
 
         /* ---- root expiry ---- */
         if (my_root != my_id && now >= exp_deadline) {
+            /* Quarantine the dead root so we don't re-adopt it from
+             * stale neighbor advertisements for one full ROOT_TIMEOUT. */
+            quarantine_root  = my_root;
+            quarantine_until = now + (long long)ROOT_TIMEOUT * 1000;
             my_root      = my_id;
             my_cost      = 0;
             parent       = -1;
