@@ -72,7 +72,6 @@ static int send_update(int fd, uint8_t link,
     return sendall(fd, buf, sizeof buf);
 }
 
-/* Print state: parent == -1 means self is root → print "NULL" */
 static void print_state(long long rel_ms,
                         uint32_t root, int32_t parent, uint32_t cost) {
     if (parent < 0)
@@ -141,7 +140,7 @@ int main(int argc, char *argv[]) {
     /* Print initial state and send first hello */
     print_state(now_ms() - start_ms, my_root, parent, my_cost);
     send_update(s, 0xFF, my_root, my_cost, my_id,
-                (uint32_t)(ROOT_TIMEOUT * 1000));
+                            (uint32_t)(ROOT_TIMEOUT * 1000));
     last_send = now_ms();
     printf("time=%.01f\tMessage sent to all neighbors\n",
            (double)(last_send - start_ms) / 1e3);
@@ -195,6 +194,9 @@ int main(int argc, char *argv[]) {
             if (r_exp_ms > (uint32_t)(ROOT_TIMEOUT * 1000))
                 r_exp_ms = (uint32_t)(ROOT_TIMEOUT * 1000);
 
+            /* Ignore effectively-expired routes */
+            if (r_exp_ms == 0) goto next_check;
+
             if ((int)link >= nlinks) goto next_check; /* unknown link – ignore */
 
             /* Ignore echoes of our own root advertisement */
@@ -208,33 +210,39 @@ int main(int argc, char *argv[]) {
                 my_root      = r_root;
                 my_cost      = via_cost;
                 parent       = (int32_t)link;
-                exp_deadline = now + (long long)ROOT_TIMEOUT * 1000;
+                exp_deadline = now + (long long)r_exp_ms;
                 changed      = 1;
             } else if (r_root == my_root) {
-                long long new_deadline = now + (long long)ROOT_TIMEOUT * 1000;
                 if ((int32_t)link == parent) {
-                    /* Update from our parent: reset expiry to full ROOT_TIMEOUT */
-                    if (new_deadline > exp_deadline)
-                        exp_deadline = new_deadline;
+                    /* Update from our current parent: refresh deadline with
+                     * the advertised expiry (only extend, never shrink). */
+                    long long new_dl = now + (long long)r_exp_ms;
+                    if (new_dl > exp_deadline)
+                        exp_deadline = new_dl;
                     if (via_cost != my_cost) {
                         my_cost = via_cost;
                         changed = 1;
                     }
                 } else if (via_cost < my_cost) {
-                    /* Shorter path to same root via different neighbor */
+                    /* Shorter path via a different neighbor — switch parent.
+                     * Use that neighbor's advertised expiry. */
                     my_cost      = via_cost;
                     parent       = (int32_t)link;
-                    exp_deadline = new_deadline;
+                    exp_deadline = now + (long long)r_exp_ms;
                     changed      = 1;
                 }
+                /* Non-parent, same or worse cost: ignore entirely.
+                 * Do NOT refresh exp_deadline — only the parent can do that. */
             }
 
             if (changed) {
                 now = now_ms();
                 print_state(now - start_ms, my_root, parent, my_cost);
 
-                send_update(s, 0xFF, my_root, my_cost, my_id,
-                            (uint32_t)(ROOT_TIMEOUT * 1000));
+                uint32_t adv = (my_root == my_id)
+                    ? (uint32_t)(ROOT_TIMEOUT * 1000)
+                    : (uint32_t)(exp_deadline > now ? exp_deadline - now : 0);
+                send_update(s, 0xFF, my_root, my_cost, my_id, adv);
                 last_send = now_ms();
                 printf("time=%.01f\tMessage sent to all neighbors\n",
                        (double)(last_send - start_ms) / 1e3);
@@ -253,7 +261,7 @@ int main(int argc, char *argv[]) {
             exp_deadline = now + (long long)ROOT_TIMEOUT * 1000;
             print_state(now - start_ms, my_root, parent, my_cost);
             send_update(s, 0xFF, my_root, my_cost, my_id,
-                        (uint32_t)(ROOT_TIMEOUT * 1000));
+                                    (uint32_t)(ROOT_TIMEOUT * 1000));
             last_send = now_ms();
             printf("time=%.01f\tMessage sent to all neighbors\n",
                    (double)(last_send - start_ms) / 1e3);
@@ -263,8 +271,10 @@ int main(int argc, char *argv[]) {
 
         /* ---- hello timer ---- */
         if (now >= last_send + (long long)HELLO_TIMEOUT * 1000) {
-            send_update(s, 0xFF, my_root, my_cost, my_id,
-                        (uint32_t)(ROOT_TIMEOUT * 1000));
+            uint32_t adv = (my_root == my_id)
+                ? (uint32_t)(ROOT_TIMEOUT * 1000)
+                : (uint32_t)(exp_deadline > now ? exp_deadline - now : 0);
+            send_update(s, 0xFF, my_root, my_cost, my_id, adv);
             last_send = now_ms();
             printf("time=%.01f\tMessage sent to all neighbors\n",
                    (double)(last_send - start_ms) / 1e3);
