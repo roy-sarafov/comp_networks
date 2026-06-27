@@ -237,11 +237,10 @@ int main(int argc, char *argv[]) {
             if (changed) {
                 now = now_ms();
                 print_state(now - start_ms, my_root, parent, my_cost);
-
-                uint32_t adv = (my_root == my_id)
-                    ? (uint32_t)(ROOT_TIMEOUT * 1000)
-                    : (uint32_t)(exp_deadline > now ? exp_deadline - now : 0);
-                send_update(s, 0xFF, my_root, my_cost, my_id, adv);
+                /* Always advertise full ROOT_TIMEOUT — exp_deadline is tracked
+                 * locally and only refreshed by parent hellos. */
+                send_update(s, 0xFF, my_root, my_cost, my_id,
+                            (uint32_t)(ROOT_TIMEOUT * 1000));
                 last_send = now_ms();
                 printf("time=%.01f\tMessage sent to all neighbors\n",
                        (double)(last_send - start_ms) / 1e3);
@@ -270,10 +269,10 @@ int main(int argc, char *argv[]) {
 
         /* ---- hello timer ---- */
         if (now >= last_send + (long long)HELLO_TIMEOUT * 1000) {
-            uint32_t adv = (my_root == my_id)
-                ? (uint32_t)(ROOT_TIMEOUT * 1000)
-                : (uint32_t)(exp_deadline > now ? exp_deadline - now : 0);
-            send_update(s, 0xFF, my_root, my_cost, my_id, adv);
+            /* Always advertise full ROOT_TIMEOUT on keepalives so downstream
+             * nodes don't expire due to hop-by-hop exp_ms decay. */
+            send_update(s, 0xFF, my_root, my_cost, my_id,
+                        (uint32_t)(ROOT_TIMEOUT * 1000));
             last_send = now_ms();
             printf("time=%.01f\tMessage sent to all neighbors\n",
                    (double)(last_send - start_ms) / 1e3);
