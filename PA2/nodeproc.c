@@ -1,18 +1,15 @@
 /*
  * nodeproc.c – Distributed Bellman-Ford node process
  *
- * Algorithm:
- *   Each node maintains (myRoot, myCost, parent, expTime).
- *   Messages are 128 bytes: buf[0] = link index, buf[1..127] = payload.
- *   Payload (network byte order, uint32_t each): root, cost, id, exp_ms.
+ * Key design decisions:
+ *   - exp_deadline is reset to (now + ROOT_TIMEOUT) on EVERY message from
+ *     the current parent, regardless of the advertised exp_ms value.
+ *     This makes failure detection depend only on parent liveness.
+ *   - Outgoing exp_ms is always ROOT_TIMEOUT*1000 to prevent hop-by-hop decay.
+ *   - Parent switches only on strictly lower cost to prevent oscillation.
+ *   - Non-parent messages never refresh exp_deadline.
  *
- * Timeouts (via select):
- *   HELLO_TIMEOUT  – send keep-alive if silent for this interval.
- *   ROOT_TIMEOUT   – if expTime reaches 0, revert to self as root.
- *   lifetime       – graceful shutdown.
- *
- * Usage:
- *   nodeproc <netproc_addr> <node_id> <lifetime> <cost1> [cost2 ...]
+ * Usage: nodeproc <netproc_addr> <node_id> <lifetime> <cost1> [cost2 ...]
  */
 
 #include <arpa/inet.h>
@@ -27,16 +24,14 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "bf.h"  /* PORT, HELLO_TIMEOUT, ROOT_TIMEOUT */
+#include "bf.h"
 
-/* Milliseconds since CLOCK_REALTIME epoch */
 static long long now_ms(void) {
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
     return (long long)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 }
 
-/* Reliable send with MSG_NOSIGNAL */
 static int sendall(int fd, const void *buf, size_t len) {
     const char *p = (const char *)buf;
     while (len) {
@@ -47,33 +42,27 @@ static int sendall(int fd, const void *buf, size_t len) {
     return 0;
 }
 
-/*
- * Wire payload (bytes 1-16 of the 127-byte user area).
- * All fields in network byte order.
- */
 struct __attribute__((packed)) bf_payload {
     uint32_t root;
     uint32_t cost;
     uint32_t id;
-    uint32_t exp_ms; /* remaining root-info lifetime in milliseconds */
+    uint32_t exp_ms;
 };
 
-static int send_update(int fd, uint8_t link,
-                       uint32_t root, uint32_t cost,
-                       uint32_t id,   uint32_t exp_ms) {
+static int send_update(int fd, uint32_t root, uint32_t cost, uint32_t id) {
     uint8_t buf[128];
     memset(buf, 0, sizeof buf);
-    buf[0] = link;
+    buf[0] = 0xFF;
     struct bf_payload *p = (struct bf_payload *)(buf + 1);
     p->root   = htonl(root);
     p->cost   = htonl(cost);
     p->id     = htonl(id);
-    p->exp_ms = htonl(exp_ms);
+    p->exp_ms = htonl((uint32_t)(ROOT_TIMEOUT * 1000));
     return sendall(fd, buf, sizeof buf);
 }
 
-static void print_state(long long rel_ms,
-                        uint32_t root, int32_t parent, uint32_t cost) {
+static void print_state(long long rel_ms, uint32_t root,
+                        int32_t parent, uint32_t cost) {
     if (parent < 0)
         printf("time=%.01f\tRoot=%u\tparent=%s\tdistance=%u\n",
                (double)rel_ms / 1e3, root, "NULL", cost);
@@ -100,10 +89,8 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i < nlinks; i++)
         costs[i] = (uint32_t)atoi(argv[4 + i]);
 
-    /* ---- connect to netproc ---- */
     int s = socket(AF_INET, SOCK_STREAM, 0);
     if (s < 0) { perror("socket"); free(costs); return 1; }
-
     int one = 1;
     setsockopt(s, IPPROTO_TCP, TCP_NODELAY, &one, sizeof one);
 
@@ -117,36 +104,26 @@ int main(int argc, char *argv[]) {
     if (connect(s, (struct sockaddr *)&srv, sizeof srv) < 0) {
         perror("connect"); close(s); free(costs); return 1;
     }
-
-    /* send my ID (uint32_t, network byte order) */
     uint32_t id_net = htonl(my_id);
     if (sendall(s, &id_net, sizeof id_net) < 0) {
         perror("send id"); close(s); free(costs); return 1;
     }
 
-    /* ---- initial state ---- */
-    long long start_ms = now_ms();
-
-    uint32_t my_root = my_id;
-    uint32_t my_cost = 0;
-    int32_t  parent  = -1;          /* -1 = no parent (self is root) */
-
-    /* Absolute deadline for current root-info expiry.
-     * For self-root we keep rolling it forward, so it effectively never fires. */
+    long long start_ms   = now_ms();
+    uint32_t  my_root    = my_id;
+    uint32_t  my_cost    = 0;
+    int32_t   parent     = -1;
     long long exp_deadline = start_ms + (long long)ROOT_TIMEOUT * 1000;
     long long last_send    = start_ms;
     long long life_end     = start_ms + (long long)lifetime * 1000;
 
-    /* Print initial state and send first hello */
     print_state(now_ms() - start_ms, my_root, parent, my_cost);
-    send_update(s, 0xFF, my_root, my_cost, my_id,
-                            (uint32_t)(ROOT_TIMEOUT * 1000));
+    send_update(s, my_root, my_cost, my_id);
     last_send = now_ms();
     printf("time=%.01f\tMessage sent to all neighbors\n",
            (double)(last_send - start_ms) / 1e3);
     fflush(stdout);
 
-    /* ================================================================ loop */
     for (;;) {
         long long now = now_ms();
 
@@ -157,8 +134,7 @@ int main(int argc, char *argv[]) {
             break;
         }
 
-        /* Next event: earliest of hello-due, root-expiry, lifetime-end */
-        long long hello_due = last_send + (long long)HELLO_TIMEOUT * 1000;
+        long long hello_due = last_send   + (long long)HELLO_TIMEOUT * 1000;
         long long root_due  = (my_root == my_id) ? life_end : exp_deadline;
         long long next      = hello_due;
         if (root_due < next) next = root_due;
@@ -167,7 +143,7 @@ int main(int argc, char *argv[]) {
         long long wait = next - now;
         if (wait < 0) wait = 0;
 
-        struct timeval tv = { .tv_sec  = wait / 1000,
+        struct timeval tv = { .tv_sec = wait / 1000,
                               .tv_usec = (wait % 1000) * 1000 };
         fd_set rfds;
         FD_ZERO(&rfds);
@@ -175,7 +151,6 @@ int main(int argc, char *argv[]) {
 
         int ret = select(s + 1, &rfds, NULL, NULL, &tv);
         if (ret < 0) { perror("select"); break; }
-
         now = now_ms();
 
         /* ---- incoming message ---- */
@@ -184,63 +159,54 @@ int main(int argc, char *argv[]) {
             ssize_t n = recv(s, buf, 128, MSG_WAITALL);
             if (n <= 0) { if (n < 0) perror("recv"); break; }
 
-            uint8_t             link  = buf[0];
-            struct bf_payload  *pay   = (struct bf_payload *)(buf + 1);
-            uint32_t r_root   = ntohl(pay->root);
-            uint32_t r_cost   = ntohl(pay->cost);
-            uint32_t r_exp_ms = ntohl(pay->exp_ms);
+            uint8_t           link  = buf[0];
+            struct bf_payload *pay  = (struct bf_payload *)(buf + 1);
+            uint32_t r_root  = ntohl(pay->root);
+            uint32_t r_cost  = ntohl(pay->cost);
 
-            /* Clamp to maximum valid expiry */
-            if (r_exp_ms > (uint32_t)(ROOT_TIMEOUT * 1000))
-                r_exp_ms = (uint32_t)(ROOT_TIMEOUT * 1000);
+            if ((int)link >= nlinks) goto next_check;
 
-            /* Ignore effectively-expired routes */
-            if (r_exp_ms == 0) goto next_check;
-
-            if ((int)link >= nlinks) goto next_check; /* unknown link – ignore */
-
-            /* Ignore echoes of our own root advertisement */
+            /* Ignore our own info echoed back when we are the root */
             if (r_root == my_id && my_root == my_id) goto next_check;
 
             uint32_t via_cost = r_cost + costs[(int)link];
             int changed = 0;
 
             if (r_root < my_root) {
-                /* Better (smaller) root found */
+                /* Better root */
                 my_root      = r_root;
                 my_cost      = via_cost;
                 parent       = (int32_t)link;
-                exp_deadline = now + (long long)r_exp_ms;
+                exp_deadline = now + (long long)ROOT_TIMEOUT * 1000;
                 changed      = 1;
             } else if (r_root == my_root) {
-                long long new_dl = now + (long long)r_exp_ms;
                 if ((int32_t)link == parent) {
-                    /* Update from current parent: refresh deadline, update cost */
-                    if (new_dl > exp_deadline)
-                        exp_deadline = new_dl;
+                    /*
+                     * Message from our current parent:
+                     * always refresh the deadline (parent is alive).
+                     */
+                    exp_deadline = now + (long long)ROOT_TIMEOUT * 1000;
                     if (via_cost != my_cost) {
                         my_cost = via_cost;
                         changed = 1;
                     }
-                } else if (via_cost < my_cost &&
-                           new_dl >= exp_deadline - (long long)HELLO_TIMEOUT * 1000) {
-                    /* Strictly shorter path AND expiry is not much worse —
-                     * switch parent. The expiry guard prevents oscillation where
-                     * a neighbor with a nearly-expired route looks cheaper. */
+                } else if (via_cost < my_cost) {
+                    /*
+                     * Strictly shorter path via a different neighbor.
+                     * Switch parent only if improvement is real.
+                     */
                     my_cost      = via_cost;
                     parent       = (int32_t)link;
-                    exp_deadline = new_dl;
+                    exp_deadline = now + (long long)ROOT_TIMEOUT * 1000;
                     changed      = 1;
                 }
+                /* Same or worse cost from non-parent: ignore. */
             }
 
             if (changed) {
                 now = now_ms();
                 print_state(now - start_ms, my_root, parent, my_cost);
-                /* Always advertise full ROOT_TIMEOUT — exp_deadline is tracked
-                 * locally and only refreshed by parent hellos. */
-                send_update(s, 0xFF, my_root, my_cost, my_id,
-                            (uint32_t)(ROOT_TIMEOUT * 1000));
+                send_update(s, my_root, my_cost, my_id);
                 last_send = now_ms();
                 printf("time=%.01f\tMessage sent to all neighbors\n",
                        (double)(last_send - start_ms) / 1e3);
@@ -258,8 +224,7 @@ int main(int argc, char *argv[]) {
             parent       = -1;
             exp_deadline = now + (long long)ROOT_TIMEOUT * 1000;
             print_state(now - start_ms, my_root, parent, my_cost);
-            send_update(s, 0xFF, my_root, my_cost, my_id,
-                                    (uint32_t)(ROOT_TIMEOUT * 1000));
+            send_update(s, my_root, my_cost, my_id);
             last_send = now_ms();
             printf("time=%.01f\tMessage sent to all neighbors\n",
                    (double)(last_send - start_ms) / 1e3);
@@ -269,10 +234,7 @@ int main(int argc, char *argv[]) {
 
         /* ---- hello timer ---- */
         if (now >= last_send + (long long)HELLO_TIMEOUT * 1000) {
-            /* Always advertise full ROOT_TIMEOUT on keepalives so downstream
-             * nodes don't expire due to hop-by-hop exp_ms decay. */
-            send_update(s, 0xFF, my_root, my_cost, my_id,
-                        (uint32_t)(ROOT_TIMEOUT * 1000));
+            send_update(s, my_root, my_cost, my_id);
             last_send = now_ms();
             printf("time=%.01f\tMessage sent to all neighbors\n",
                    (double)(last_send - start_ms) / 1e3);
