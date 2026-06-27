@@ -213,26 +213,25 @@ int main(int argc, char *argv[]) {
                 exp_deadline = now + (long long)r_exp_ms;
                 changed      = 1;
             } else if (r_root == my_root) {
+                long long new_dl = now + (long long)r_exp_ms;
                 if ((int32_t)link == parent) {
-                    /* Update from our current parent: refresh deadline with
-                     * the advertised expiry (only extend, never shrink). */
-                    long long new_dl = now + (long long)r_exp_ms;
+                    /* Update from current parent: refresh deadline, update cost */
                     if (new_dl > exp_deadline)
                         exp_deadline = new_dl;
                     if (via_cost != my_cost) {
                         my_cost = via_cost;
                         changed = 1;
                     }
-                } else if (via_cost < my_cost) {
-                    /* Shorter path via a different neighbor — switch parent.
-                     * Use that neighbor's advertised expiry. */
+                } else if (via_cost < my_cost &&
+                           new_dl >= exp_deadline - (long long)HELLO_TIMEOUT * 1000) {
+                    /* Strictly shorter path AND expiry is not much worse —
+                     * switch parent. The expiry guard prevents oscillation where
+                     * a neighbor with a nearly-expired route looks cheaper. */
                     my_cost      = via_cost;
                     parent       = (int32_t)link;
-                    exp_deadline = now + (long long)r_exp_ms;
+                    exp_deadline = new_dl;
                     changed      = 1;
                 }
-                /* Non-parent, same or worse cost: ignore entirely.
-                 * Do NOT refresh exp_deadline — only the parent can do that. */
             }
 
             if (changed) {
